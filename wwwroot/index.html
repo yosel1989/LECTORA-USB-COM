@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="dark">
+<title>Lector USB</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23818cf8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 8v8M11 8v8M15 8v8M18 8v8'/%3E%3C/svg%3E">
+<style>
+  /* Paleta Tailwind (sin CDN: la página se sirve desde el .exe y debe funcionar sin internet) */
+  :root {
+    --slate-950: #020617; --slate-900: #0f172a; --slate-800: #1e293b; --slate-700: #334155;
+    --slate-600: #475569; --slate-500: #64748b; --slate-400: #94a3b8; --slate-300: #cbd5e1;
+    --slate-200: #e2e8f0; --slate-100: #f1f5f9;
+    --indigo-300: #a5b4fc; --indigo-400: #818cf8; --indigo-500: #6366f1; --indigo-600: #4f46e5;
+    --emerald-400: #34d399; --emerald-500: #10b981;
+    --rose-400: #fb7185; --rose-500: #f43f5e;
+    --amber-400: #fbbf24; --sky-400: #38bdf8;
+    --radius: 0.75rem;
+    --font: ui-sans-serif, system-ui, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "Cascadia Code", "Cascadia Mono", Consolas, monospace;
+  }
+  *, *::before, *::after { box-sizing: border-box; }
+  html { color-scheme: dark; }
+  body {
+    margin: 0; min-height: 100vh; font: 14px/1.5 var(--font); color: var(--slate-200);
+    background:
+      radial-gradient(1200px 500px at 10% -10%, rgba(99, 102, 241, 0.12), transparent 60%),
+      radial-gradient(900px 400px at 110% 10%, rgba(16, 185, 129, 0.06), transparent 60%),
+      var(--slate-950);
+    background-attachment: fixed;
+    -webkit-font-smoothing: antialiased;
+  }
+  button, input, select { font: inherit; color: inherit; }
+  code, .mono { font-family: var(--mono); }
+  [hidden] { display: none !important; }
+
+  .container { max-width: 1200px; margin: 0 auto; padding: 24px 16px 48px; }
+
+  /* Header */
+  header { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; margin-bottom: 24px; }
+  .brand { display: flex; align-items: center; gap: 12px; }
+  .logo {
+    width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center;
+    background: linear-gradient(135deg, var(--indigo-500), var(--indigo-600));
+    box-shadow: 0 8px 24px -8px rgba(99, 102, 241, 0.6), inset 0 1px 0 rgba(255,255,255,0.15);
+  }
+  .logo svg { width: 22px; height: 22px; color: #fff; }
+  h1 { font-size: 18px; font-weight: 600; margin: 0; color: var(--slate-100); letter-spacing: -0.01em; }
+  .tagline { margin: 0; font-size: 13px; color: var(--slate-400); }
+  .endpoint {
+    display: flex; align-items: center; gap: 8px; padding: 6px 6px 6px 12px;
+    background: rgba(15, 23, 42, 0.7); border: 1px solid var(--slate-800); border-radius: 999px;
+  }
+  .endpoint code { font-size: 13px; color: var(--indigo-300); }
+
+  /* Cards */
+  .card {
+    background: rgba(15, 23, 42, 0.7); border: 1px solid var(--slate-800); border-radius: var(--radius);
+    box-shadow: 0 1px 2px rgba(0,0,0,0.3); backdrop-filter: blur(6px);
+  }
+  .card-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 16px 20px; border-bottom: 1px solid var(--slate-800); }
+  .card-header h2 { margin: 0; font-size: 14px; font-weight: 600; color: var(--slate-100); }
+  .card-header p { margin: 2px 0 0; font-size: 12px; color: var(--slate-400); }
+  .card-body { padding: 20px; }
+
+  /* Stats */
+  .stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px; margin-bottom: 24px; }
+  .stat { padding: 16px 20px; }
+  .stat-label { font-size: 12px; font-weight: 500; color: var(--slate-400); text-transform: uppercase; letter-spacing: 0.05em; }
+  .stat-value { margin-top: 6px; font-size: 24px; font-weight: 600; color: var(--slate-100); font-variant-numeric: tabular-nums; }
+  .stat-value.small { font-size: 15px; font-weight: 500; line-height: 1.4; overflow-wrap: anywhere; }
+  .stat-sub { margin-top: 2px; font-size: 12px; color: var(--slate-500); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .flash { animation: flash 0.8s ease-out; }
+  @keyframes flash { from { color: var(--emerald-400); } to { color: var(--slate-100); } }
+
+  .status-line { display: flex; align-items: center; gap: 10px; }
+  .dot { position: relative; width: 10px; height: 10px; border-radius: 50%; background: var(--rose-500); flex: none; }
+  .dot.on { background: var(--emerald-500); }
+  .dot.on::after {
+    content: ""; position: absolute; inset: 0; border-radius: 50%; background: var(--emerald-500);
+    animation: ping 1.6s cubic-bezier(0, 0, 0.2, 1) infinite;
+  }
+  @keyframes ping { 75%, 100% { transform: scale(2.4); opacity: 0; } }
+
+  /* Layout */
+  .layout { display: grid; grid-template-columns: minmax(0, 1.35fr) minmax(0, 1fr); gap: 24px; align-items: start; }
+  .sticky { position: sticky; top: 16px; }
+
+  /* Form */
+  .section + .section { margin-top: 24px; padding-top: 24px; border-top: 1px solid var(--slate-800); }
+  .section-title { margin: 0 0 14px; font-size: 13px; font-weight: 600; color: var(--slate-300); display: flex; align-items: center; gap: 8px; }
+  .section-title svg { width: 16px; height: 16px; color: var(--indigo-400); }
+  .grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+  .grid-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+  .field { display: grid; gap: 6px; }
+  .field.full { grid-column: 1 / -1; }
+  .field label { font-size: 13px; font-weight: 500; color: var(--slate-300); }
+  .field .help { font-size: 12px; color: var(--slate-500); }
+  .field .help code { color: var(--indigo-300); }
+
+  input, select {
+    width: 100%; height: 38px; padding: 0 12px; background: var(--slate-950); border: 1px solid var(--slate-700);
+    border-radius: 8px; outline: none; transition: border-color 0.15s, box-shadow 0.15s;
+  }
+  input::placeholder { color: var(--slate-600); }
+  input:hover, select:hover { border-color: var(--slate-600); }
+  input:focus, select:focus { border-color: var(--indigo-500); box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.25); }
+  select {
+    appearance: none; padding-right: 36px; cursor: pointer;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='%2394a3b8'%3E%3Cpath fill-rule='evenodd' d='M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.17l3.71-3.94a.75.75 0 1 1 1.08 1.04l-4.25 4.5a.75.75 0 0 1-1.08 0l-4.25-4.5a.75.75 0 0 1 .02-1.06z' clip-rule='evenodd'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 10px center; background-size: 18px;
+  }
+  select option { background: var(--slate-900); }
+  .input-group { display: flex; gap: 8px; }
+  .input-group select { flex: 1; min-width: 0; }
+  .brand > div { min-width: 0; }
+  .field, .card { min-width: 0; }
+
+  /* Ayuda contextual: icono (i) junto a la etiqueta + tooltip */
+  .label-row { display: flex; align-items: center; gap: 6px; }
+  .info {
+    display: inline-grid; place-items: center; width: 16px; height: 16px; padding: 0; flex: none;
+    border-radius: 50%; border: 1px solid var(--slate-600); background: transparent; color: var(--slate-400);
+    font: 600 10px/1 var(--font); font-style: italic; cursor: help; transition: all 0.15s;
+  }
+  .info:hover, .info:focus-visible, .info[aria-expanded="true"] {
+    outline: none; color: var(--indigo-300); border-color: var(--indigo-400); background: rgba(99, 102, 241, 0.15);
+  }
+  .tooltip {
+    position: fixed; z-index: 60; max-width: 300px; padding: 10px 12px; border-radius: 8px;
+    background: var(--slate-800); border: 1px solid var(--slate-700); color: var(--slate-200);
+    font-size: 12.5px; line-height: 1.5; box-shadow: 0 12px 32px -8px rgba(0, 0, 0, 0.7);
+    opacity: 0; transform: translateY(4px); pointer-events: none; transition: opacity 0.12s, transform 0.12s;
+  }
+  .tooltip.show { opacity: 1; transform: none; }
+  .tooltip::after {
+    content: ""; position: absolute; left: var(--arrow-x, 16px); width: 8px; height: 8px;
+    background: var(--slate-800); border: solid var(--slate-700); transform: translateX(-50%) rotate(45deg);
+  }
+  .tooltip[data-side="top"]::after { bottom: -5px; border-width: 0 1px 1px 0; }
+  .tooltip[data-side="bottom"]::after { top: -5px; border-width: 1px 0 0 1px; }
+
+  /* Buttons */
+  .btn {
+    display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 38px; padding: 0 14px;
+    border-radius: 8px; border: 1px solid var(--slate-700); background: var(--slate-800); color: var(--slate-200);
+    font-weight: 500; cursor: pointer; transition: background 0.15s, border-color 0.15s, transform 0.05s; white-space: nowrap;
+  }
+  .btn:hover { background: var(--slate-700); border-color: var(--slate-600); }
+  .btn:active { transform: translateY(1px); }
+  .btn:focus-visible { outline: none; box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.35); }
+  .btn svg { width: 16px; height: 16px; }
+  .btn-primary { background: var(--indigo-600); border-color: var(--indigo-500); color: #fff; box-shadow: 0 4px 14px -4px rgba(99, 102, 241, 0.6); }
+  .btn-primary:hover { background: var(--indigo-500); border-color: var(--indigo-400); }
+  .btn-icon { width: 38px; padding: 0; flex: none; }
+  .btn-sm { height: 30px; padding: 0 10px; font-size: 12px; }
+  .btn-ghost { background: transparent; border-color: transparent; color: var(--slate-400); }
+  .btn-ghost:hover { background: var(--slate-800); color: var(--slate-200); border-color: transparent; }
+  .btn.spinning svg { animation: spin 0.6s linear; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .form-footer { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 16px 20px; border-top: 1px solid var(--slate-800); background: rgba(2, 6, 23, 0.4); border-radius: 0 0 var(--radius) var(--radius); }
+  .form-footer .path { font-size: 12px; color: var(--slate-500); overflow-wrap: anywhere; }
+
+  /* Badges */
+  .badge { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 500; border: 1px solid; white-space: nowrap; }
+  .badge-ok { color: var(--emerald-400); background: rgba(16, 185, 129, 0.1); border-color: rgba(16, 185, 129, 0.25); }
+  .badge-bad { color: var(--rose-400); background: rgba(244, 63, 94, 0.1); border-color: rgba(244, 63, 94, 0.25); }
+  .badge-muted { color: var(--slate-400); background: rgba(100, 116, 139, 0.1); border-color: rgba(100, 116, 139, 0.25); }
+  .badge-port { color: var(--indigo-300); background: rgba(99, 102, 241, 0.1); border-color: rgba(99, 102, 241, 0.25); font-family: var(--mono); font-size: 11px; padding: 1px 8px; }
+
+  /* Alert */
+  .alert { display: flex; gap: 12px; padding: 14px 16px; margin-bottom: 16px; border-radius: 10px; background: rgba(251, 191, 36, 0.06); border: 1px solid rgba(251, 191, 36, 0.25); color: var(--slate-300); font-size: 13px; }
+  .alert svg { width: 20px; height: 20px; color: var(--amber-400); flex: none; margin-top: 1px; }
+  .alert strong { color: var(--amber-400); font-weight: 600; }
+  .alert ol { margin: 6px 0 0; padding-left: 18px; }
+  .alert li { margin: 4px 0; }
+  .alert b { color: var(--slate-100); font-weight: 600; }
+
+  /* Monitor */
+  .log { height: 520px; overflow-y: auto; padding: 8px; font-family: var(--mono); font-size: 13px; }
+  .log::-webkit-scrollbar { width: 10px; }
+  .log::-webkit-scrollbar-thumb { background: var(--slate-800); border-radius: 10px; border: 3px solid var(--slate-900); }
+  .entry { display: flex; align-items: flex-start; gap: 10px; padding: 8px 10px; border-radius: 8px; cursor: pointer; transition: background 0.15s; }
+  .entry:hover { background: rgba(30, 41, 59, 0.6); }
+  .entry time { color: var(--slate-500); flex: none; font-size: 12px; padding-top: 1px; }
+  .entry .data { color: var(--slate-100); white-space: pre-wrap; overflow-wrap: anywhere; flex: 1; }
+  .entry.status .data { color: var(--slate-400); font-style: italic; font-family: var(--font); }
+  .entry.new { animation: enter 0.6s ease-out; }
+  @keyframes enter { from { background: rgba(16, 185, 129, 0.15); } to { background: transparent; } }
+  .empty { display: grid; place-items: center; gap: 10px; height: 100%; text-align: center; color: var(--slate-500); font-family: var(--font); padding: 24px; }
+  .empty svg { width: 40px; height: 40px; color: var(--slate-700); }
+
+  /* Toast */
+  .toast {
+    position: fixed; right: 20px; bottom: 20px; z-index: 50; display: flex; align-items: flex-start; gap: 10px; max-width: 420px;
+    padding: 12px 16px; border-radius: 10px; background: var(--slate-900); border: 1px solid var(--slate-700);
+    box-shadow: 0 20px 40px -12px rgba(0,0,0,0.6); font-size: 13px;
+    transform: translateY(12px); opacity: 0; pointer-events: none; transition: all 0.2s ease-out;
+  }
+  .toast.show { transform: none; opacity: 1; pointer-events: auto; }
+  .toast svg { width: 18px; height: 18px; flex: none; margin-top: 1px; }
+  .toast.ok svg { color: var(--emerald-400); }
+  .toast.bad svg { color: var(--rose-400); }
+
+  @media (max-width: 960px) {
+    .layout { grid-template-columns: 1fr; }
+    .sticky { position: static; }
+    .stats { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    .log { height: 360px; }
+  }
+  @media (max-width: 560px) {
+    .stats, .grid, .grid-4 { grid-template-columns: 1fr; }
+    .endpoint { width: 100%; justify-content: space-between; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+  <header>
+    <div class="brand">
+      <div class="logo">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 8v8M11 8v8M15 8v8M18 8v8"/></svg>
+      </div>
+      <div>
+        <h1>Lector USB</h1>
+        <p class="tagline">Lectora USB (COM virtual) &rarr; servicio de Windows &rarr; WebSocket local</p>
+      </div>
+    </div>
+    <div class="endpoint" title="Dirección a la que se conecta el front">
+      <code id="wsUrl">ws://127.0.0.1:…/</code>
+      <button type="button" class="btn btn-sm btn-ghost" id="copyWs" title="Copiar">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+        Copiar
+      </button>
+    </div>
+  </header>
+
+  <section class="stats">
+    <div class="card stat">
+      <div class="stat-label">Lectora</div>
+      <div class="stat-value small status-line"><span id="dot" class="dot"></span><span id="statusText">Consultando…</span></div>
+    </div>
+    <div class="card stat">
+      <div class="stat-label">Clientes conectados</div>
+      <div class="stat-value" id="clients">–</div>
+      <div class="stat-sub">fronts escuchando el WebSocket</div>
+    </div>
+    <div class="card stat">
+      <div class="stat-label">Tramas leídas</div>
+      <div class="stat-value" id="frames">–</div>
+      <div class="stat-sub" id="lastFrameAt">desde que inició el servicio</div>
+    </div>
+    <div class="card stat">
+      <div class="stat-label">Última trama</div>
+      <div class="stat-value small mono" id="lastFrame">–</div>
+    </div>
+  </section>
+
+  <div class="layout">
+
+    <form id="form" class="card" novalidate>
+      <div class="card-header">
+        <div>
+          <h2>Configuración</h2>
+          <p>Los cambios se aplican al guardar, sin reiniciar el servicio</p>
+        </div>
+      </div>
+
+      <div class="card-body">
+        <div id="noPortsHelp" class="alert" hidden>
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4M12 17h.01"/></svg>
+          <div>
+            <strong>No se detecta ninguna lectora USB en modo COM</strong>
+            <ol>
+              <li>Conecte la lectora a un puerto USB y pulse el botón de actualizar.</li>
+              <li>Si sigue sin aparecer, está en <b>modo teclado (HID)</b>, que es como viene de fábrica.
+                  Cámbiela a <b>USB-COM / USB CDC / Virtual COM</b> escaneando el código de configuración del manual
+                  (a veces figura como <i>USB Serial Emulation</i>).</li>
+              <li>En el Administrador de dispositivos debe aparecer en <b>Puertos (COM y LPT)</b>. Si aparece con un signo de advertencia, instale el driver del fabricante.</li>
+            </ol>
+          </div>
+        </div>
+
+        <div class="section">
+          <h3 class="section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="10" cy="7" r="1"/><circle cx="4" cy="20" r="1"/><path d="M4.7 19.3 19 5M21 3l-3 1 2 2zM9.26 7.68 5 12l2 5M10 14l5 2 3.5-3.5M18 12h1v-1"/></svg>
+            Lectora USB
+          </h3>
+          <div class="field">
+            <label for="comPort" data-info="Es la lectora conectada por USB. Windows le asigna un nombre como COM3. Si no aparece en la lista, conéctela y pulse el botón de actualizar.">Puerto COM virtual</label>
+            <div class="input-group">
+              <select id="comPort" required></select>
+              <button type="button" class="btn btn-icon" id="refreshPorts" title="Volver a buscar lectoras conectadas">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-2.64-6.36L21 8"/><path d="M21 3v5h-5"/></svg>
+              </button>
+            </div>
+            <span class="help">Solo se leerán las tramas de esta lectora</span>
+          </div>
+        </div>
+
+        <div class="section">
+          <h3 class="section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 21v-7M4 10V3M12 21v-9M12 8V3M20 21v-5M20 12V3M1 14h6M9 8h6M17 16h6"/></svg>
+            Parámetros serie
+          </h3>
+          <div class="grid grid-4">
+            <div class="field">
+              <label for="baudRate" data-info="Velocidad a la que la lectora envía los datos. Debe ser la misma que tiene configurada la lectora; la mayoría usa 9600. Si en el monitor aparecen caracteres extraños, pruebe 115200 o la velocidad que indique el manual.">Baudios</label>
+              <input id="baudRate" type="number" min="110" list="bauds" required>
+              <datalist id="bauds">
+                <option value="1200"><option value="2400"><option value="4800"><option value="9600">
+                <option value="19200"><option value="38400"><option value="57600"><option value="115200">
+              </datalist>
+            </div>
+            <div class="field">
+              <label for="dataBits" data-info="Cantidad de bits que forman cada carácter. Casi siempre es 8. Cámbielo solo si el manual de la lectora indica otro valor.">Bits de datos</label>
+              <select id="dataBits"><option>8</option><option>7</option><option>6</option><option>5</option></select>
+            </div>
+            <div class="field">
+              <label for="parity" data-info="Comprobación de errores que se agrega a cada carácter. Casi todas las lectoras usan «Ninguna». Cámbiela solo si el manual lo indica.">Paridad</label>
+              <select id="parity">
+                <option value="None">Ninguna</option><option value="Even">Par</option><option value="Odd">Impar</option>
+                <option value="Mark">Marca</option><option value="Space">Espacio</option>
+              </select>
+            </div>
+            <div class="field">
+              <label for="stopBits" data-info="Señal que marca el final de cada carácter. Casi siempre es 1. La configuración más común es 9600 baudios, 8 bits de datos, sin paridad y 1 bit de parada (9600 8N1).">Bits de parada</label>
+              <select id="stopBits"><option value="One">1</option><option value="OnePointFive">1.5</option><option value="Two">2</option></select>
+            </div>
+          </div>
+          <div class="grid" style="margin-top:16px">
+            <div class="field">
+              <label for="frameIdleTimeoutMs" data-info="Tiempo sin recibir datos tras el cual se da una lectura por terminada. Solo hace falta si la lectora no envía un salto de línea al final de cada código. Si los códigos llegan cortados en dos partes, aumente este valor.">Fin de trama por silencio (ms)</label>
+              <input id="frameIdleTimeoutMs" type="number" min="0" max="60000" required>
+              <span class="help">Para lectoras que no envían CR/LF. 0 = desactivado</span>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h3 class="section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"/></svg>
+            Salida WebSocket
+          </h3>
+          <div class="grid">
+            <div class="field">
+              <label for="webSocketPort" data-info="Puerto por el que la aplicación recibe las lecturas (ws://127.0.0.1:puerto). Si lo cambia, cámbielo también en la aplicación que se conecta. Debe ser un puerto libre; el valor por defecto es 21818.">Puerto de salida</label>
+              <input id="webSocketPort" type="number" min="1" max="65535" required>
+              <span class="help"><code>ws://127.0.0.1:<span id="portPreview">21818</span>/</code></span>
+            </div>
+            <div class="field">
+              <label for="outputFormat" data-info="JSON: cada lectura llega con datos adicionales (puerto y hora), y también llegan avisos cuando la lectora se conecta o desconecta. Texto plano: llega solo el código leído. Elija el que espere la aplicación que se conecta.">Formato</label>
+              <select id="outputFormat">
+                <option value="json">JSON  {"type":"frame","data":…}</option>
+                <option value="raw">Texto plano (solo la trama)</option>
+              </select>
+            </div>
+          </div>
+        </div>
+
+        <div class="section">
+          <h3 class="section-title">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/></svg>
+            Seguridad
+          </h3>
+          <div class="field">
+            <label for="allowedOrigins" data-info="Limita qué páginas web pueden recibir las lecturas. Escriba la dirección de su aplicación, por ejemplo https://mi-app.empresa.com. Déjelo vacío para permitir cualquiera.">Orígenes permitidos <span style="color:var(--slate-500);font-weight:400">(opcional)</span></label>
+            <input id="allowedOrigins" placeholder="http://localhost:4200, https://mi-app.empresa.com">
+            <span class="help">Separados por coma. Vacío = cualquier página puede conectarse al WebSocket</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="form-footer">
+        <span class="path">Archivo: <code id="settingsFile">–</code></span>
+        <button class="btn btn-primary" type="submit" id="saveBtn">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6 9 17l-5-5"/></svg>
+          Guardar cambios
+        </button>
+      </div>
+    </form>
+
+    <section class="card sticky">
+      <div class="card-header">
+        <div>
+          <h2>Monitor en vivo</h2>
+          <p>Escanee un código para probar la lectora</p>
+        </div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span id="wsState" class="badge badge-muted">Conectando…</span>
+          <button type="button" class="btn btn-sm btn-ghost" id="pauseLog" title="Pausar / reanudar">Pausar</button>
+          <button type="button" class="btn btn-sm btn-ghost" id="clearLog" title="Limpiar">Limpiar</button>
+        </div>
+      </div>
+      <div class="log" id="log">
+        <div class="empty" id="logEmpty">
+          <div>
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2M17 3h2a2 2 0 0 1 2 2v2M21 17v2a2 2 0 0 1-2 2h-2M7 21H5a2 2 0 0 1-2-2v-2M7 8v8M11 8v8M15 8v8M18 8v8"/></svg>
+            <div>Esperando tramas…</div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </div>
+</div>
+
+<div class="tooltip" id="tooltip" role="tooltip"></div>
+
+<div class="toast" id="toast" role="status" aria-live="polite">
+  <svg id="toastIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></svg>
+  <span id="toastText"></span>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+const ICON_OK = '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>';
+const ICON_BAD = '<circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/>';
+let lastFrameCount = null;
+let paused = false;
+let toastTimer;
+
+async function api(path, options) {
+  const res = await fetch(path, options);
+  const body = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error((body.errors || [res.statusText]).join(' '));
+  return body;
+}
+
+function toast(text, ok = true, ms = 4000) {
+  const el = $('toast');
+  el.className = 'toast show ' + (ok ? 'ok' : 'bad');
+  $('toastIcon').innerHTML = ok ? ICON_OK : ICON_BAD;
+  $('toastText').textContent = text;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), ms);
+}
+
+async function loadPorts(selected) {
+  const ports = await api('/api/ports');
+  const select = $('comPort');
+  select.innerHTML = '';
+
+  const addOption = (value, text, disabled = false) => {
+    const opt = document.createElement('option');
+    opt.value = value;
+    opt.textContent = text;
+    opt.disabled = disabled;
+    select.appendChild(opt);
+  };
+
+  addOption('', ports.length ? '— Seleccione la lectora —' : '— No hay lectoras USB en modo COM —', true);
+  $('noPortsHelp').hidden = ports.length > 0;
+  for (const p of ports)
+    addOption(p.name, p.description ? `${p.name} — ${p.description}` : p.name);
+  // El puerto guardado puede estar desenchufado: se mantiene visible para no perder la selección.
+  if (selected && !ports.some(p => p.name === selected))
+    addOption(selected, `${selected} (no conectado)`);
+
+  select.value = selected || '';
+}
+
+async function loadSettings() {
+  const s = await api('/api/settings');
+  await loadPorts(s.comPort);
+  for (const key of ['webSocketPort', 'baudRate', 'frameIdleTimeoutMs', 'outputFormat', 'parity', 'stopBits'])
+    $(key).value = s[key];
+  $('dataBits').value = String(s.dataBits);
+  $('allowedOrigins').value = (s.allowedOrigins || []).join(', ');
+  $('portPreview').textContent = s.webSocketPort;
+}
+
+async function refreshStatus() {
+  try {
+    const st = await api('/api/status');
+    $('dot').classList.toggle('on', st.serial.connected);
+    $('statusText').textContent = st.serial.message;
+    $('wsUrl').textContent = st.webSocketUrl;
+    $('clients').textContent = st.clients;
+    $('lastFrame').textContent = st.serial.lastFrame ?? '–';
+    $('settingsFile').textContent = st.settingsFile;
+    if (st.serial.lastFrameAt)
+      $('lastFrameAt').textContent = 'última a las ' + new Date(st.serial.lastFrameAt).toLocaleTimeString();
+
+    const frames = $('frames');
+    if (lastFrameCount !== null && st.serial.frameCount !== lastFrameCount) {
+      frames.classList.remove('flash'); void frames.offsetWidth; frames.classList.add('flash');
+    }
+    frames.textContent = st.serial.frameCount.toLocaleString();
+    lastFrameCount = st.serial.frameCount;
+  } catch {
+    $('dot').classList.remove('on');
+    $('statusText').textContent = 'Sin respuesta del servicio';
+  }
+}
+
+$('webSocketPort').addEventListener('input', e => $('portPreview').textContent = e.target.value || '?');
+
+$('refreshPorts').addEventListener('click', async e => {
+  const btn = e.currentTarget;
+  btn.classList.remove('spinning'); void btn.offsetWidth; btn.classList.add('spinning');
+  await loadPorts($('comPort').value);
+});
+
+$('copyWs').addEventListener('click', async () => {
+  try { await navigator.clipboard.writeText($('wsUrl').textContent); toast('Dirección copiada'); }
+  catch { toast('No se pudo copiar', false); }
+});
+
+$('form').addEventListener('submit', async e => {
+  e.preventDefault();
+  if (!$('comPort').value) { toast('Seleccione la lectora USB antes de guardar.', false); $('comPort').focus(); return; }
+
+  const settings = {
+    comPort: $('comPort').value,
+    webSocketPort: Number($('webSocketPort').value),
+    baudRate: Number($('baudRate').value),
+    dataBits: Number($('dataBits').value),
+    parity: $('parity').value,
+    stopBits: $('stopBits').value,
+    outputFormat: $('outputFormat').value,
+    frameIdleTimeoutMs: Number($('frameIdleTimeoutMs').value),
+    allowedOrigins: $('allowedOrigins').value.split(',').map(s => s.trim()).filter(Boolean),
+  };
+
+  const btn = $('saveBtn');
+  btn.disabled = true;
+  try {
+    const result = await api('/api/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings),
+    });
+    if (result.webSocketPortChanged) {
+      const port = result.settings.webSocketPort;
+      toast(`Guardado. El servicio ahora escucha en el puerto ${port}; redirigiendo…`, true, 5000);
+      setTimeout(() => location.href = `http://${location.hostname}:${port}/`, 2000);
+    } else {
+      toast('Configuración guardada y aplicada.');
+      refreshStatus();
+    }
+  } catch (err) {
+    toast(err.message, false, 6000);
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+function logEntry(text, kind, port) {
+  if (paused) return;
+  const log = $('log');
+  $('logEmpty')?.remove();
+
+  const entry = document.createElement('div');
+  entry.className = `entry ${kind} new`;
+  const time = document.createElement('time');
+  time.textContent = new Date().toLocaleTimeString();
+  entry.append(time);
+  if (port) {
+    const badge = document.createElement('span');
+    badge.className = 'badge badge-port';
+    badge.textContent = port;
+    entry.append(badge);
+  }
+  const data = document.createElement('span');
+  data.className = 'data';
+  data.textContent = text;
+  entry.append(data);
+  if (kind === 'frame') {
+    entry.title = 'Clic para copiar';
+    entry.addEventListener('click', () => navigator.clipboard.writeText(text).then(() => toast('Trama copiada'), () => {}));
+  }
+
+  log.prepend(entry);
+  while (log.childElementCount > 200) log.lastElementChild.remove();
+}
+
+$('clearLog').addEventListener('click', () => { $('log').innerHTML = ''; });
+$('pauseLog').addEventListener('click', e => {
+  paused = !paused;
+  e.currentTarget.textContent = paused ? 'Reanudar' : 'Pausar';
+});
+
+function setWsState(text, cls) {
+  const el = $('wsState');
+  el.textContent = text;
+  el.className = 'badge ' + cls;
+}
+
+function connectMonitor() {
+  const ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => setWsState('En vivo', 'badge-ok');
+  ws.onmessage = ev => {
+    let msg;
+    try { msg = JSON.parse(ev.data); } catch { msg = null; }
+    if (msg && msg.type === 'frame') logEntry(msg.data, 'frame', msg.port);
+    else if (msg && msg.type === 'status') { logEntry(msg.message, 'status'); refreshStatus(); }
+    else logEntry(ev.data, 'frame');
+  };
+  ws.onclose = () => { setWsState('Reconectando…', 'badge-bad'); setTimeout(connectMonitor, 2000); };
+}
+
+// Ayuda contextual: cada <label data-info="..."> recibe un icono (i) que muestra el texto al pasar
+// el mouse, al enfocarlo con el teclado o al tocarlo en pantallas táctiles.
+function setupInfoTips() {
+  const tip = $('tooltip');
+  let current = null;
+
+  const show = btn => {
+    current?.setAttribute('aria-expanded', 'false');
+    current = btn;
+    btn.setAttribute('aria-expanded', 'true');
+    tip.textContent = btn.dataset.tip;
+
+    const r = btn.getBoundingClientRect();
+    const w = tip.offsetWidth, h = tip.offsetHeight, gap = 10, margin = 8;
+    const left = Math.min(Math.max(r.left + r.width / 2 - 16, margin), innerWidth - w - margin);
+    const above = r.top - h - gap >= margin;
+    tip.dataset.side = above ? 'top' : 'bottom';
+    tip.style.left = left + 'px';
+    tip.style.top = (above ? r.top - h - gap : r.bottom + gap) + 'px';
+    tip.style.setProperty('--arrow-x', (r.left + r.width / 2 - left) + 'px');
+    tip.classList.add('show');
+  };
+  const hide = () => {
+    current?.setAttribute('aria-expanded', 'false');
+    current = null;
+    tip.classList.remove('show');
+  };
+
+  document.querySelectorAll('label[data-info]').forEach(label => {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'info';
+    btn.textContent = 'i';
+    btn.dataset.tip = label.dataset.info;
+    btn.setAttribute('aria-label', 'Más información: ' + label.textContent.trim());
+    btn.setAttribute('aria-describedby', 'tooltip');
+    btn.setAttribute('aria-expanded', 'false');
+    btn.addEventListener('mouseenter', () => show(btn));
+    btn.addEventListener('mouseleave', hide);
+    btn.addEventListener('focus', () => show(btn));
+    btn.addEventListener('blur', hide);
+    btn.addEventListener('click', e => { e.preventDefault(); current === btn ? hide() : show(btn); });
+
+    const row = document.createElement('div');
+    row.className = 'label-row';
+    label.replaceWith(row);
+    row.append(label, btn);
+  });
+
+  document.addEventListener('keydown', e => { if (e.key === 'Escape') hide(); });
+  document.addEventListener('click', e => { if (current && !e.target.closest('.info')) hide(); });
+  addEventListener('scroll', hide, { passive: true });
+  addEventListener('resize', hide);
+}
+
+setupInfoTips();
+loadSettings().catch(err => toast(err.message, false, 6000));
+refreshStatus();
+setInterval(refreshStatus, 3000);
+connectMonitor();
+</script>
+</body>
+</html>

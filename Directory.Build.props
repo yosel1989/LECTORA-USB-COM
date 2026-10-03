@@ -1,0 +1,8 @@
+<Project>
+  <!-- Todo lo generado (compilación, publicación e instalador) va a .\output, no a la raíz del proyecto. -->
+  <PropertyGroup>
+    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)output\obj\</BaseIntermediateOutputPath>
+    <BaseOutputPath>$(MSBuildThisFileDirectory)output\bin\</BaseOutputPath>
+    <DefaultItemExcludes>$(DefaultItemExcludes);output\**;installer\**</DefaultItemExcludes>
+  </PropertyGroup>
+</Project>

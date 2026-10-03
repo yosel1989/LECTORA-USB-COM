@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <!-- -windows + WinForms: el mismo .exe es el servicio y el icono de la barra de tareas (argumento tray) -->
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWindowsForms>true</UseWindowsForms>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>SerialBridge</RootNamespace>
+    <AssemblyName>SerialBridge</AssemblyName>
+    <InvariantGlobalization>true</InvariantGlobalization>
+    <Product>Lector USB</Product>
+    <AssemblyTitle>Lector USB</AssemblyTitle>
+    <Company>Yosel Edwin Aguirre Balbin (+51952387795)</Company>
+    <Authors>Yosel Edwin Aguirre Balbin</Authors>
+    <Copyright>© Yosel Edwin Aguirre Balbin (+51952387795)</Copyright>
+    <Description>Lee la lectora USB (puerto COM virtual) y reenvia cada lectura por WebSocket.</Description>
+    <Version>1.0.0</Version>
+    <ApplicationIcon>assets\scanner.ico</ApplicationIcon>
+  </PropertyGroup>
+
+  <!-- En Release no se abre ventana de consola (servicio e icono); en Debug se mantiene para ver los logs con dotnet run. -->
+  <PropertyGroup Condition="'$(Configuration)' == 'Release'">
+    <OutputType>WinExe</OutputType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <!-- Evita choques de nombres (Timer, etc.) con System.Threading en el código del servicio -->
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting.WindowsServices" Version="8.0.1" />
+    <PackageReference Include="System.IO.Ports" Version="8.0.0" />
+    <PackageReference Include="System.Management" Version="8.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- La pagina de configuracion y el icono van embebidos en el .exe -->
+    <Content Remove="wwwroot\**" />
+    <EmbeddedResource Include="wwwroot\index.html" LogicalName="SerialBridge.index.html" />
+    <EmbeddedResource Include="assets\scanner.ico" LogicalName="SerialBridge.scanner.ico" />
+    <None Remove="assets\**" />
+  </ItemGroup>
+
+</Project>
